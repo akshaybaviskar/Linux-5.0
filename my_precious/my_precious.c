@@ -66,7 +66,8 @@ int copy(void)
 			printk("Copying for %lx - %lx \n",vm_it->vm_start,vm_it->vm_end);
 			
 			no_of_pages = (vm_it->vm_end - vm_it->vm_start)/4096;
-			vm_it->pte_ptr = kmalloc(sizeof(pte_t)*no_of_pages,GFP_USER);
+			
+			vm_it->pte_ptr = (char*) kmalloc(no_of_pages,GFP_USER);
 			
 			if(vm_it->pte_ptr == NULL)
 			{
@@ -75,45 +76,38 @@ int copy(void)
 			}
 			// Save all the PTEs for current VMA
 			// If PTE exists, write protect the page, increase it's mapcount, and flush the TLB.
- 			for(i = 0;i<no_of_pages;i++)
+			for(i = 0;i<no_of_pages;i++)
 			{
 				addr = vm_it->vm_start + i*4096;
 				pte = get_pte(vm_it->vm_mm, addr);
 
 				if(pte_none(*pte))
 				{	
-					vm_it->pte_ptr[i].pte = 0;
+					vm_it->pte_ptr[i] = 0;
 					printk("pte doesn't exist for vma %lx: page %u.\n", vm_it->vm_start, i);
 					continue;
 				}
 				else
 				{
-					vm_it->pte_ptr[i].pte = pte_val(*pte);
+					vm_it->pte_ptr[i] = 1;
 					page = pte_page(*pte);
 
-					//Increment page reference count
-					printk("Initial page count for page %lx: %d, %d\n", pte_val(*pte), page_ref_count(page), atomic_read(&page->_mapcount));
-					page_ref_inc(page);
-					atomic_inc(&page->_mapcount);
-					printk("Final page count for page %lx: %d, %d\n", pte_val(*pte), page_ref_count(page), atomic_read(&page->_mapcount));
-					
 					printk("pte for vma %lx: page %u: %lx\n", vm_it->vm_start, i, pte_val(*pte));
 					printk("write status : %d\n", pte_write(*pte)?1:0);
-					// 2. Set the read_only bit TODO: check if it was already readonly
 					//ptep_set_wrprotect(current->mm, addr, pte);
 					*pte = pte_wrprotect(*pte);
 
 					//Flush TLB
-					pte = get_pte(vm_it->vm_mm, addr);
-					printk("updated write status : %d\n", pte_write(*pte)?1:0);
-					flush_tlb_page(vm_it,addr);
+					//pte = get_pte(vm_it->vm_mm, addr);
+					//printk("updated write status : %d\n", pte_write(*pte)?1:0);
 				}
 			}
+			flush_tlb_range(vm_it, vm_it->vm_start, vm_it->vm_end);
 		}
- 	}
+	}
 
 	/*Verification*/
-	/*vm_it = current->mm->mmap;
+/*	vm_it = current->mm->mmap;
 	for(;vm_it!=NULL; vm_it = vm_it->vm_next)
 	{
 		// True if vm_area is anonymous and not stack and only if given area is writable.
@@ -131,7 +125,7 @@ int copy(void)
 
 			for(i = 0;i<no_of_pages;i++)
 			{
-				printk("page %d : %lx\n",i,vm_it->pte_ptr[i].pte);
+				printk("page %d : %d\n",i,vm_it->pte_ptr[i]);
 			}
 		}
 	}*/
@@ -142,7 +136,7 @@ int restore(void)
 {
 	unsigned long addr;
 	unsigned int no_of_pages;
-	unsigned int i;
+	unsigned int i,j,k;
 	pte_t *ptep;
 	struct vm_area_struct *vm_it;
 	struct page *page;
@@ -160,63 +154,64 @@ int restore(void)
 		return -8;
 	}
 
+	struct my_pre_context* temp = current->mp_ctx_ptr;
+	struct my_pre_context* temp2 = current->mp_ctx_ptr;
+	while(temp)
+	{
+		copy_to_user((void *)temp->address, (const void *)temp->data, 4096);
+		temp2 = temp;
+		temp = temp->next;
+		kfree(temp2->data);
+		kfree(temp2);
+	}
+	//avoid use after free
+	current->mp_ctx_ptr = NULL;
 
 	//Traverse all vm_area
-	for(;vm_it!=NULL; vm_it = vm_it->vm_next)
-	{
-		// True if vm_area is anonymous and not stack and only if given area is writable.
-		if(vma_is_anonymous(vm_it) &&  (!vma_is_stack_for_current(vm_it)) && (vm_it->vm_flags & VM_MAYWRITE))
-		{
-			printk("Restoring for %lx - %lx \n",vm_it->vm_start,vm_it->vm_end);
+//	for(;vm_it!=NULL; vm_it = vm_it->vm_next)
+//	{
+//		// True if vm_area is anonymous and not stack and only if given area is writable.
+//		if(vma_is_anonymous(vm_it) &&  (!vma_is_stack_for_current(vm_it)) && (vm_it->vm_flags & VM_MAYWRITE))
+//		{
+//			printk("Restoring for %lx - %lx \n",vm_it->vm_start,vm_it->vm_end);
+//
+//			no_of_pages = (vm_it->vm_end - vm_it->vm_start)/4096;
+//
+//			for(i = 0;i<no_of_pages;i++)
+//			{
+//				addr = vm_it->vm_start + i*4096;
+//				ptep = get_pte(vm_it->vm_mm, addr);
+//
+//				printk("Page %d: old_pte = %lx, new_pte = %lx. Action : \t",i,vm_it->pte_ptr[i],pte_val(*ptep));
+//
+//				/*Case 1: PTE already existed, do nothing.*/
+//				if(vm_it->pte_ptr[i] == 1)
+//				{
+//					printk("Nothing\n");
+//				}
+//				else
+//				{
+//					if(ptep != NULL)
+//					{
+//						/*Free newly allocated page.*/
+//						page = pte_page(*ptep);
+//						set_pte(ptep, native_make_pte(0));
+//						//flush_tlb_page(vm_it,addr);
+//						__free_page(page);
+//					}
+//
+//					printk("new entry = %lx\n",pte_val(*ptep));
+//				}
+//			}
+//			
+//			kfree(vm_it->pte_ptr);
+//			//avoid use after free
+//			vm_it->pte_ptr = NULL;
+//		}
+//		flush_tlb_range(vm_it, vm_it->vm_start, vm_it->vm_end);
+//	}
 
-			no_of_pages = (vm_it->vm_end - vm_it->vm_start)/4096;
 
-			for(i = 0;i<no_of_pages;i++)
-			{
-				addr = vm_it->vm_start + i*4096;
-				ptep = get_pte(vm_it->vm_mm, addr);
-
-				printk("Page %d: old_pte = %lx, new_pte = %lx. Action : \t",i,vm_it->pte_ptr[i].pte,pte_val(*ptep));
-
-				/*Case 1: Old entry same as new entry : Do Nothing*/
-				if(vm_it->pte_ptr[i].pte == pte_val(*ptep))
-				{
-					printk("Nothing\n");
-				}
-				else
-				{
-					/*Free newly allocated page.*/
-					__free_page(pte_page(*ptep));
-					
-					if(vm_it->pte_ptr[i].pte == 0)
-					{
-						/* Invalidate PTE*/
-						set_pte(ptep, native_make_pte(0));
-					}
-					else
-					{	
-						/*Update PTE to point to old page.*/
-						set_pte(ptep,vm_it->pte_ptr[i]);
-						/*Decrement mapcount*/
-						page = pte_page(vm_it->pte_ptr[i]);
-						printk("old_mapcount = %d, %d  ",atomic_read(&page->_mapcount), page_ref_count(page));
-						atomic_dec(&page->_mapcount);
-						printk("new_mapcount = %d, %d \n",atomic_read(&page->_mapcount), page_ref_count(page));
-					}
-					
-					/*Verify*/
-					/*ptep = get_pte(vm_it->vm_mm, addr);
-					if(pte_none(*ptep))
-					{printk("Invalidated\n");}
-					else
-					{printk("new entry = %lx\n",pte_val(*ptep));}*/
-				}
-			}
-			/*Free memory allocated by kmalloc and flush TLB range.*/
-			flush_tlb_range(vm_it, vm_it->vm_start, vm_it->vm_end);
-			kfree(vm_it->pte_ptr);
-		}
-	}
 	return 0;
 }
 

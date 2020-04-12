@@ -589,6 +589,12 @@ struct wake_q_node {
 	struct wake_q_node *next;
 };
 
+struct my_pre_context {
+	char* data;
+   unsigned long address;
+	struct my_pre_context *next;
+};
+
 struct task_struct {
 #ifdef CONFIG_THREAD_INFO_IN_TASK
 	/*
@@ -1203,6 +1209,9 @@ struct task_struct {
 #endif
 
 	u8 mp_flag; /*my_precious flag. 1:context is saved, 0:context is not saved*/
+	
+	struct my_pre_context* mp_ctx_ptr; /*my_precious context pointer*/ 
+
 	/*
 	 * New fields for task_struct should be added above here, so that
 	 * they are included in the randomized portion of task_struct.

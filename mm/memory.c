@@ -2482,6 +2482,32 @@ static vm_fault_t do_wp_page(struct vm_fault *vmf)
 	__releases(vmf->ptl)
 {
 	struct vm_area_struct *vma = vmf->vma;
+   if(current->mp_flag == 1)
+	{
+		/*Create new node.*/
+		unsigned int cpy_success;
+		struct my_pre_context* new_page =  (struct my_pre_context*)kmalloc(sizeof(struct my_pre_context), GFP_USER);
+      new_page->data = kmalloc(4096, GFP_USER);
+		new_page->address = vmf->address;
+		new_page->next = NULL;
+      
+	   cpy_success  = copy_from_user((void *)new_page->data, (const void *)vmf->address, 4096);	
+		
+		/*insert new node at beginning*/
+		if(current->mp_ctx_ptr == NULL)
+		{
+			current->mp_ctx_ptr = new_page;
+      }
+		else
+		{
+			struct my_pre_context* temp;
+         temp = current->mp_ctx_ptr;
+			
+			current->mp_ctx_ptr = new_page;
+			new_page->next = temp;
+		}
+		
+	}
 
 	vmf->page = vm_normal_page(vma, vmf->address, vmf->orig_pte);
 	if (!vmf->page) {
