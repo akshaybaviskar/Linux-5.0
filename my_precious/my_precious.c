@@ -12,7 +12,9 @@
 #include <../include/linux/page_ref.h>
 #include <../include/linux/hugetlb.h>
 
+#define Approach 1
 
+#if(Approach == 1)
 pte_t* get_pte(struct mm_struct *mm, unsigned long addr)
 {
 	pgd_t *pgd;
@@ -38,11 +40,9 @@ pte_t* get_pte(struct mm_struct *mm, unsigned long addr)
 
 int copy(void)
 {
-	unsigned long addr;
 	unsigned int no_of_pages;
 	unsigned int i;
 	pte_t *pte;
-	struct page *page;
 	struct vm_area_struct *vm_it;
 
 	if(current == NULL)
@@ -61,82 +61,49 @@ int copy(void)
 	for(;vm_it!=NULL; vm_it = vm_it->vm_next)
 	{
 		// True if vm_area is anonymous and not stack and only if given area is writable.
-		if(vma_is_anonymous(vm_it) &&  (!vma_is_stack_for_current(vm_it)) && (vm_it->vm_flags & VM_MAYWRITE))
+		if(vma_is_anonymous(vm_it) &&  (!vma_is_stack_for_current(vm_it)) && (vm_it->vm_flags & (VM_WRITE|VM_MAYWRITE)))
 		{
-			printk("Copying for %lx - %lx \n",vm_it->vm_start,vm_it->vm_end);
-			
+		//	printk("Copying for %lx - %lx \n",vm_it->vm_start,vm_it->vm_end);
+			register char* pte_ptr_local;
 			no_of_pages = (vm_it->vm_end - vm_it->vm_start)/4096;
 			
-			vm_it->pte_ptr = (char*) kmalloc(no_of_pages,GFP_USER);
+			pte_ptr_local = (char*) kmalloc(no_of_pages,GFP_USER);
 			
-			if(vm_it->pte_ptr == NULL)
+			if(pte_ptr_local == NULL)
 			{
 				printk("Failed to obtain kmalloc.\n");
 				break;
 			}
-			// Save all the PTEs for current VMA
-			// If PTE exists, write protect the page, increase it's mapcount, and flush the TLB.
+			// If PTE exists, write protect the page, save the info and flush the TLB.
+			register unsigned long addr;
+			addr = vm_it->vm_start;
 			for(i = 0;i<no_of_pages;i++)
 			{
-				addr = vm_it->vm_start + i*4096;
+				addr = addr + 4096;
 				pte = get_pte(vm_it->vm_mm, addr);
 
 				if(pte_none(*pte))
 				{	
-					vm_it->pte_ptr[i] = 0;
-					printk("pte doesn't exist for vma %lx: page %u.\n", vm_it->vm_start, i);
-					continue;
+					pte_ptr_local[i] = 0;
 				}
 				else
 				{
-					vm_it->pte_ptr[i] = 1;
-					page = pte_page(*pte);
-
-					printk("pte for vma %lx: page %u: %lx\n", vm_it->vm_start, i, pte_val(*pte));
-					printk("write status : %d\n", pte_write(*pte)?1:0);
-					//ptep_set_wrprotect(current->mm, addr, pte);
+					pte_ptr_local[i] = 1;
 					*pte = pte_wrprotect(*pte);
-
-					//Flush TLB
-					//pte = get_pte(vm_it->vm_mm, addr);
-					//printk("updated write status : %d\n", pte_write(*pte)?1:0);
 				}
 			}
+			vm_it->pte_ptr = pte_ptr_local;
 			flush_tlb_range(vm_it, vm_it->vm_start, vm_it->vm_end);
 		}
 	}
 
-	/*Verification*/
-/*	vm_it = current->mm->mmap;
-	for(;vm_it!=NULL; vm_it = vm_it->vm_next)
-	{
-		// True if vm_area is anonymous and not stack and only if given area is writable.
-		if(vma_is_anonymous(vm_it) &&  (!vma_is_stack_for_current(vm_it)) && (vm_it->vm_flags & VM_MAYWRITE))
-		{
-			printk("Printing for %lx - %lx \n",vm_it->vm_start,vm_it->vm_end);
-
-			no_of_pages = (vm_it->vm_end - vm_it->vm_start)/4096;
-			
-			if(vm_it->pte_ptr == NULL)
-			{
-				printk("Entry doesn't exist\n");
-				break;
-			}
-
-			for(i = 0;i<no_of_pages;i++)
-			{
-				printk("page %d : %d\n",i,vm_it->pte_ptr[i]);
-			}
-		}
-	}*/
 	return 0;	
 }
 
 int restore(void)
 {
-	unsigned long addr;
 	unsigned int no_of_pages;
-	unsigned int i,j,k;
+	unsigned int i;
 	pte_t *ptep;
 	struct vm_area_struct *vm_it;
 	struct page *page;
@@ -164,57 +131,59 @@ int restore(void)
 		kfree(temp2->data);
 		kfree(temp2);
 	}
-	//avoid use after free
 	current->mp_ctx_ptr = NULL;
 
 	//Traverse all vm_area
-//	for(;vm_it!=NULL; vm_it = vm_it->vm_next)
-//	{
-//		// True if vm_area is anonymous and not stack and only if given area is writable.
-//		if(vma_is_anonymous(vm_it) &&  (!vma_is_stack_for_current(vm_it)) && (vm_it->vm_flags & VM_MAYWRITE))
-//		{
-//			printk("Restoring for %lx - %lx \n",vm_it->vm_start,vm_it->vm_end);
-//
-//			no_of_pages = (vm_it->vm_end - vm_it->vm_start)/4096;
-//
-//			for(i = 0;i<no_of_pages;i++)
-//			{
-//				addr = vm_it->vm_start + i*4096;
-//				ptep = get_pte(vm_it->vm_mm, addr);
-//
-//				printk("Page %d: old_pte = %lx, new_pte = %lx. Action : \t",i,vm_it->pte_ptr[i],pte_val(*ptep));
-//
-//				/*Case 1: PTE already existed, do nothing.*/
-//				if(vm_it->pte_ptr[i] == 1)
-//				{
-//					printk("Nothing\n");
-//				}
-//				else
-//				{
-//					if(ptep != NULL)
-//					{
-//						/*Free newly allocated page.*/
-//						page = pte_page(*ptep);
-//						set_pte(ptep, native_make_pte(0));
-//						//flush_tlb_page(vm_it,addr);
-//						__free_page(page);
-//					}
-//
-//					printk("new entry = %lx\n",pte_val(*ptep));
-//				}
-//			}
-//			
-//			kfree(vm_it->pte_ptr);
-//			//avoid use after free
-//			vm_it->pte_ptr = NULL;
-//		}
-//		flush_tlb_range(vm_it, vm_it->vm_start, vm_it->vm_end);
-//	}
+	for(;vm_it!=NULL; vm_it = vm_it->vm_next)
+	{
+		// True if vm_area is anonymous and not stack and only if given area is writable.
+		if(vma_is_anonymous(vm_it) &&  (!vma_is_stack_for_current(vm_it)) && (vm_it->vm_flags & (VM_WRITE | VM_MAYWRITE)))
+		{
+			register char* pte_ptr_local = vm_it->pte_ptr;
+			register unsigned long addr = vm_it->vm_start;
+			no_of_pages = (vm_it->vm_end - addr)/4096;
+
+			for(i = 0;i<no_of_pages;i++)
+			{
+
+				/*Case 1: PTE already existed, do nothing.*/
+				if(pte_ptr_local[i] == 1)
+				{
+					//printk("Nothing\n");
+				}
+				else
+				{
+
+					ptep = get_pte(vm_it->vm_mm, addr);
+	//				if(!pte_none(*ptep))
+	//				{
+	//					/*Free newly allocated page.*/
+	//					page = pte_page(*ptep);
+	//					set_pte(ptep, native_make_pte(0));
+	//					//flush_tlb_page(vm_it,addr);
+	//					put_page(page);
+	//				}
+
+				//	printk("new entry = %lx\n",pte_val(*ptep));
+				}
+				addr = addr+4096;
+			}
+			
+			kfree(vm_it->pte_ptr);
+			vm_it->pte_ptr = NULL;
+		}
+		flush_tlb_range(vm_it, vm_it->vm_start, vm_it->vm_end);
+	}
 
 
 	return 0;
 }
+#endif 
 
+#if(Approach == 2)
+
+
+#endif
 
 SYSCALL_DEFINE1(my_precious, bool, x)
 {
@@ -240,6 +209,6 @@ SYSCALL_DEFINE1(my_precious, bool, x)
 		ret = -EINVAL;
 	}
 
-        printk("\nmy_precious called by pid %d\n", current->pid);
+        printk("\nmy_precious v5 pid %d\n", current->pid);
         return ret;
 }
