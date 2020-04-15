@@ -68,11 +68,8 @@ int save_context(void)
 		return -8;
 	}
 
-	struct mm_struct *mm = current->mm;
-	struct vm_area_struct* vm_it_temp = vm_it;
-
 	//Traverse all vm_area
-	for(;vm_it->vm_end< mm->start_stack; vm_it = vm_it->vm_next)
+	for(;vm_it!=NULL; vm_it = vm_it->vm_next)
 	{
 		first = 1;
 		// True if vm_area is anonymous and not stack and only if given area is writable.
@@ -152,11 +149,8 @@ int restore_context(void)
 	}
 	current->mp_ctx_ptr = NULL;
 
-	struct mm_struct *mm = current->mm;
-	struct vm_area_struct* vm_it_temp = vm_it;
-
 	//Traverse all vm_area
-	for(;vm_it->vm_end< mm->start_stack; vm_it = vm_it->vm_next)
+	for(;vm_it!=NULL; vm_it = vm_it->vm_next)
 	{
 		// True if vm_area is anonymous and not stack and only if given area is writable.
 		first = 1;
@@ -178,12 +172,11 @@ int restore_context(void)
 				}
 				else
 				{
-					if(ptep != NULL);
+					if(ptep != NULL)
 					{
 						/*Free newly allocated page.*/
 						page = pte_page(*ptep);	
 	    				set_pte(ptep, native_make_pte(0));
-			//			//flush_tlb_page(vm_it,addr);
 						__free_page(page);
 					}
 				}
@@ -196,7 +189,6 @@ int restore_context(void)
 			flush_tlb_range(vm_it, vm_it->vm_start, vm_it->vm_end);
 		}
 	}
-
 
 	return 0;
 }
@@ -225,6 +217,6 @@ SYSCALL_DEFINE1(my_precious, bool, x)
 		ret = -EINVAL;
 	}
 
-        //printk("\nmy_precious ++- pid %d\n", current->pid);
+        printk("\nmy_precious ++- pid %d\n", current->pid);
         return ret;
 }
