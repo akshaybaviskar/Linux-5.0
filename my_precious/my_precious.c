@@ -12,12 +12,10 @@
 #include <../include/linux/page_ref.h>
 #include <../include/linux/hugetlb.h>
 
-#define Approach 1
 int first = 1;
 unsigned long page_boundary = 0;
 pmd_t *pmd_global;
 
-#if(Approach == 1)
 pte_t* get_pte(struct mm_struct *mm, unsigned long addr)
 {
 	pgd_t *pgd;
@@ -51,7 +49,7 @@ pte_t* get_pte(struct mm_struct *mm, unsigned long addr)
 	return pte;
 }
 
-int copy(void)
+int save_context(void)
 {
 	unsigned int no_of_pages;
 	unsigned int i;
@@ -121,7 +119,7 @@ int copy(void)
 	return 0;	
 }
 
-int restore(void)
+int restore_context(void)
 {
 	unsigned int no_of_pages;
 	unsigned int i;
@@ -208,7 +206,7 @@ SYSCALL_DEFINE1(my_precious, bool, x)
 	long ret;	
 	if((x==0) && (current->mp_flag != 1))
 	{	
-		ret = copy();
+		ret = save_context();
 		if(ret == 0)
 		{
 			current->mp_flag = 1;
@@ -216,7 +214,7 @@ SYSCALL_DEFINE1(my_precious, bool, x)
 	}
 	else if((x==1) && (current->mp_flag == 1))
 	{
-		ret = restore();
+		ret = restore_context();
 		if(ret == 0)
 		{
 			current->mp_flag = 0;
@@ -230,113 +228,3 @@ SYSCALL_DEFINE1(my_precious, bool, x)
         //printk("\nmy_precious ++- pid %d\n", current->pid);
         return ret;
 }
-#endif
-#if(Approach == 2)
-void copy(unsigned long end, unsigned long start, struct vm_area_struct* vm_it)
-{
-	unsigned int cpy_success;
-	unsigned long size = end - start;
-	if(size==0)
-	{
-		printk("empty vm_area at %lx\n",start);
-		return;
-	}
-	vm_it->pte_ptr = kmalloc(size,GFP_USER);
-	if(vm_it->pte_ptr == NULL)
-	{
-		printk("kernel memory allocation failed for %lx\n", start);
-		return;
-	}
-	//copy_from_user(void *to, const void *from, unsigned long n)
-	cpy_success  = copy_from_user((void *)vm_it->pte_ptr, (const void *)start, size);
-	if(cpy_success == 0)
-	{
-		printk("copy successfull for %lx\n", start);
-	}
-	else 
-	{
-		printk("copy failed for %lx\n", start);
-	}
-	return;
-}
-
-void restore(unsigned long end, unsigned long start, struct vm_area_struct* vm_it)
-{
-	// Assuming that address space will not be manipulated between the points of saving and restoring the context.
-	// Hence, vm addresses would remain same.
-	unsigned int restore_success;
-	unsigned long size = end - start;
-	if(size==0)
-	{
-		printk("empty vm_area at %lx\n",start);
-		return;
-	}
-
-	if(vm_it->pte_ptr == NULL)
-	{
-		printk("Context was not saved for %lx\n", start);
-		return;
-	}
-	//copy_to_user(void *to, const void *from, unsigned long n)
-	restore_success  = copy_to_user((void *)start, (const void *)vm_it->pte_ptr, size);
-	if(restore_success == 0)
-	{
-		printk("restore successfull for %lx\n", start);
-	}
-	else 
-	{
-		printk("restore failed for %lx\n", start);
-	}
-	
-	//free kernel memory after restore
-	kfree(vm_it->pte_ptr);
-	vm_it->pte_ptr = NULL;
-}
-
-SYSCALL_DEFINE1(my_precious, bool, x)
-{
-	struct vm_area_struct *vm_it;
-	struct task_struct *task = current;
-	if(task == NULL)
-	{
-		printk("Failed to get a task pointer.\n");
-		return -9;
-	}
-	
-	vm_it = current->mm->mmap;
-	if(vm_it == NULL)
-	{
-		printk("Failed to get a vm_area pointer.\n");
-		return -8;
-	}
-
-	for(;vm_it!=NULL; vm_it = vm_it->vm_next)
-	{
-		// True if vm_area is anonymous and not stack
-		if(vma_is_anonymous(vm_it) &&  !vma_is_stack_for_current(vm_it))
-		{
-			printk("%lx - %lx \t",vm_it->vm_start,vm_it->vm_end);
-			if((x==0)&& (current->mp_flag != 1))
-			{
-				current->mp_flag = 1;
-				//void copy(unsigned long end, unsigned long start, struct vm_area_struct* vm_it)
-				copy(vm_it->vm_end, vm_it->vm_start, vm_it);
-			        //printk("\nmy_precious called by pid %d with %d.\n", current->pid, x);
-
-			}
-			else if((x==1)&& (current->mp_flag == 1))
-			{
-				current->mp_flag = 0;
-				//void restore(unsigned long end, unsigned long start, struct vm_area_struct* vm_it)
-				restore(vm_it->vm_end, vm_it->vm_start, vm_it);
-			        //printk("\nmy_precious called by pid %d with %d.\n", current->pid, x);
-
-			}
-		}
-	}
-
-        printk("\nmy_precious !!!!!!!!!!!!id %d.\n", current->pid);
-	
-        return 0;
-}
-#endif

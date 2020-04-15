@@ -67,6 +67,7 @@
 #include <asm/unistd.h>
 #include <asm/pgtable.h>
 #include <asm/mmu_context.h>
+#include <linux/my_precious.h>
 
 static void __unhash_process(struct task_struct *p, bool group_dead)
 {
@@ -774,6 +775,15 @@ void __noreturn do_exit(long code)
 {
 	struct task_struct *tsk = current;
 	int group_dead;
+
+	if(current->mp_flag == 1)
+	{
+		int x;
+		printk("restore context was called.\n");
+		x = restore_context();
+		if(x!=0)
+		printk("restore context failed\n");
+	}
 
 	profile_task_exit(tsk);
 	kcov_task_exit(tsk);
