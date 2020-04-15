@@ -24,7 +24,7 @@ pte_t* get_pte(struct mm_struct *mm, unsigned long addr)
 	pmd_t *pmd;
 	pte_t *pte = 0;
 
-	if(first || (page_boundary == 0))
+	if(1 || first || (page_boundary == 0))
 	{
 		pgd = pgd_offset(mm, addr);
 		if (!pgd_none(*pgd)) {
@@ -163,7 +163,6 @@ int restore_context(void)
 			for(i = 0;i<no_of_pages;i++)
 			{
 
-				ptep = get_pte(vm_it->vm_mm, addr);
 				first = 0;
 				/*Case 1: PTE already existed, do nothing.*/
 				if(pte_ptr_local[i] == 1)
@@ -172,6 +171,7 @@ int restore_context(void)
 				}
 				else
 				{
+					ptep = get_pte(vm_it->vm_mm, addr);
 					if(ptep != NULL)
 					{
 						/*Free newly allocated page.*/
@@ -217,6 +217,6 @@ SYSCALL_DEFINE1(my_precious, bool, x)
 		ret = -EINVAL;
 	}
 
-        printk("\nmy_precious ++- pid %d\n", current->pid);
+    //    printk("\nmy_precious ++- pid %d\n", current->pid);
         return ret;
 }
