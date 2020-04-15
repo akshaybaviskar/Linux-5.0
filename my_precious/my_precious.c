@@ -12,10 +12,6 @@
 #include <../include/linux/page_ref.h>
 #include <../include/linux/hugetlb.h>
 
-int first = 1;
-unsigned long page_boundary = 0;
-pmd_t *pmd_global;
-
 pte_t* get_pte(struct mm_struct *mm, unsigned long addr)
 {
 	pgd_t *pgd;
@@ -24,27 +20,17 @@ pte_t* get_pte(struct mm_struct *mm, unsigned long addr)
 	pmd_t *pmd;
 	pte_t *pte = 0;
 
-	if(1 || first || (page_boundary == 0))
-	{
-		pgd = pgd_offset(mm, addr);
-		if (!pgd_none(*pgd)) {
-			p4d = p4d_offset(pgd, addr);
-			if (!p4d_none(*p4d)) {
-				pud = pud_offset(p4d, addr);
-				if (!pud_none(*pud)) {
-					pmd = pmd_offset(pud, addr);
-					pmd_global = pmd;
-					if (!pmd_none(*pmd))
-						pte = pte_offset_map(pmd, addr);
-				}
+	pgd = pgd_offset(mm, addr);
+	if (!pgd_none(*pgd)) {
+		p4d = p4d_offset(pgd, addr);
+		if (!p4d_none(*p4d)) {
+			pud = pud_offset(p4d, addr);
+			if (!pud_none(*pud)) {
+				pmd = pmd_offset(pud, addr);
+				if (!pmd_none(*pmd))
+					pte = pte_offset_map(pmd, addr);
 			}
 		}
-	}
-	else
-	{
-				//	printk("entered\t");
-					if (!pmd_none(*pmd_global))
-						pte = pte_offset_map(pmd_global, addr);
 	}
 	return pte;
 }
@@ -71,7 +57,6 @@ int save_context(void)
 	//Traverse all vm_area
 	for(;vm_it!=NULL; vm_it = vm_it->vm_next)
 	{
-		first = 1;
 		// True if vm_area is anonymous and not stack and only if given area is writable.
 		if(vma_is_anonymous(vm_it) &&  (!vma_is_stack_for_current(vm_it)) && (vm_it->vm_flags & (VM_WRITE|VM_MAYWRITE)))
 		{
@@ -93,7 +78,6 @@ int save_context(void)
 			{
 					
 				pte = get_pte(vm_it->vm_mm, addr);
-				first = 0;
 
 				if(pte_none(*pte))
 				{	
@@ -105,8 +89,6 @@ int save_context(void)
 					*pte = pte_wrprotect(*pte);
 				}
 				addr = addr + 4096;
-			//	printk("%lx \n", addr);
-				page_boundary = addr&0x1ff000; 
 			}
 			vm_it->pte_ptr = pte_ptr_local;
 			flush_tlb_range(vm_it, vm_it->vm_start, vm_it->vm_end);
@@ -153,7 +135,6 @@ int restore_context(void)
 	for(;vm_it!=NULL; vm_it = vm_it->vm_next)
 	{
 		// True if vm_area is anonymous and not stack and only if given area is writable.
-		first = 1;
 		if(vma_is_anonymous(vm_it) &&  (!vma_is_stack_for_current(vm_it)) && (vm_it->vm_flags & (VM_WRITE | VM_MAYWRITE)))
 		{
 			register char* pte_ptr_local = vm_it->pte_ptr;
@@ -163,8 +144,7 @@ int restore_context(void)
 			for(i = 0;i<no_of_pages;i++)
 			{
 
-				first = 0;
-				/*Case 1: PTE already existed, do nothing.*/
+				/*PTE already existed, do nothing.*/
 				if(pte_ptr_local[i] == 1)
 				{
 					//printk("Nothing\n");
@@ -181,7 +161,6 @@ int restore_context(void)
 					}
 				}
 				addr = addr+4096;
-				page_boundary = addr&0x1ff000; 
 			}
 			
 			kfree(vm_it->pte_ptr);
@@ -189,7 +168,6 @@ int restore_context(void)
 			flush_tlb_range(vm_it, vm_it->vm_start, vm_it->vm_end);
 		}
 	}
-
 	return 0;
 }
 
