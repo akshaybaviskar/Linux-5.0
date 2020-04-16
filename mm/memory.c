@@ -2489,14 +2489,14 @@ static vm_fault_t do_wp_page(struct vm_fault *vmf)
 		struct my_pre_context* new_page =  (struct my_pre_context*)kmalloc(sizeof(struct my_pre_context), GFP_USER);
 		if(new_page != NULL)
 		{
-		   new_page->data = kmalloc(4096, GFP_USER);
-	 	   new_page->address = vmf->address;
+		   new_page->k_address = kmalloc(4096, GFP_USER);
+	 	   new_page->v_address = vmf->address;
 	 	   new_page->next = NULL;
 
-			if(new_page->data != NULL)
+			if(new_page->k_address != NULL)
 			{
    	 	  
-			   cpy_success  = copy_from_user((void *)new_page->data, (const void *)vmf->address, 4096);	
+			   cpy_success  = copy_from_user((void *)new_page->k_address, (const void *)vmf->address, 4096);	
 
 				if(cpy_success != 0)
 				{

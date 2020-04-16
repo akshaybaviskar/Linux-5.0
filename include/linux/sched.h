@@ -590,8 +590,8 @@ struct wake_q_node {
 };
 
 struct my_pre_context {
-	char* data;
-   unsigned long address;
+	char* k_address;   /*pointer to page allocated by kmalloc. page is copied to this address.*/
+   unsigned long v_address; /*virtual address of the page causing page fault*/
 	struct my_pre_context *next;
 };
 
@@ -1208,9 +1208,15 @@ struct task_struct {
 	unsigned long			prev_lowest_stack;
 #endif
 
-	u8 mp_flag; /*my_precious flag. 1:context is saved, 0:context is not saved*/
-	
-	struct my_pre_context* mp_ctx_ptr; /*my_precious context pointer*/ 
+	/*my_precious flag. 1:context is saved, 0:context is not saved*/
+	u8 mp_flag; 
+
+	/*
+	 * my_precious context pointer: head of the linked list
+	 * containing saved pages i.e. pages for which unsafe code tried to 
+	 * modify after checkpointing.
+	 */ 
+	struct my_pre_context* mp_ctx_ptr; 
 
 	/*
 	 * New fields for task_struct should be added above here, so that

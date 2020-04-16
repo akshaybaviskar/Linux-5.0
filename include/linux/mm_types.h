@@ -328,7 +328,13 @@ struct vm_area_struct {
 	struct mempolicy *vm_policy;	/* NUMA policy for the VMA */
 #endif
 	struct vm_userfaultfd_ctx vm_userfaultfd_ctx;
-	u8* pte_ptr;          /*flag to page table entries stored for this vma. */
+
+	/*
+	 * pointer to array of flags of page table entries for this vma.
+    * flag = 1, if pte existed before checkpointing
+	 * flag = 0, otherwise.
+	 */
+	u8* pte_ptr;          
 } __randomize_layout;
 
 struct core_thread {

@@ -123,10 +123,10 @@ int restore_context(void)
 	struct my_pre_context* temp2 = current->mp_ctx_ptr;
 	while(temp)
 	{
-		copy_to_user((void *)temp->address, (const void *)temp->data, 4096);
+		copy_to_user((void *)temp->v_address, (const void *)temp->k_address, 4096);
 		temp2 = temp;
 		temp = temp->next;
-		kfree(temp2->data);
+		kfree(temp2->k_address);
 		kfree(temp2);
 	}
 	current->mp_ctx_ptr = NULL;
